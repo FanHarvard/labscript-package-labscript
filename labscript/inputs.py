@@ -71,3 +71,22 @@ class AnalogIn(Device):
         )
         return end_time - start_time
 
+
+class Counter(Device):
+    """Counter Input for edge counting over timed gate windows."""
+    description = "Counter Input"
+
+    def __init__(self, name, parent_device, connection, edge_terminal, gate_terminal, **kwargs):
+        self.acquisitions = []
+        self.edge_terminal = edge_terminal
+        self.gate_terminal = gate_terminal
+        Device.__init__(self, name, parent_device, connection, **kwargs)
+
+    def acquire(self, label):
+        """Schedule a counter with gate window."""
+        self.acquisitions.append(
+            {
+                "label": label
+            }
+        )
+        return
