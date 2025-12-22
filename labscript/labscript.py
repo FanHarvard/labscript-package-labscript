@@ -65,7 +65,7 @@ from .core import (
     PseudoclockDevice,
     TriggerableDevice,
 )
-from .inputs import AnalogIn
+from .inputs import AnalogIn, Counter
 from .outputs import (
     Output,
     AnalogOut,
@@ -721,7 +721,7 @@ def load_globals(hdf5_filename):
             try:
                 assert '.' not in name
                 exec(name + ' = 0')
-                exec('del ' + name )
+                # exec('del ' + name )
             except:
                 raise LabscriptError('ERROR whilst parsing globals from %s. \'%s\''%(hdf5_filename,name) +
                                      'is not a valid Python variable name.' +
