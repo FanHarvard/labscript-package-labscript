@@ -71,3 +71,46 @@ class AnalogIn(Device):
         )
         return end_time - start_time
 
+
+class Counter(Device):
+    """Counter Input for edge counting over timed gate windows."""
+    description = "Counter Input"
+
+    def __init__(self, name, parent_device, connection, edge_terminal, gate_terminal=None, sample_terminal=None, **kwargs):
+        """Counter device
+
+        Args:
+            name (str): python variable to assign this device to.
+            parent_device (:obj:`IntermediateDevice`): Device this counter is attached to. (e.g. NI_***)
+            connection (str): Connection name on the parent device. (e.g. /NI_***/ctr0)
+            edge_terminal (str): Terminal on the parent device for edge counting. (e.g. PFI0)
+            gate_terminal (str): Terminal on the parent device for gate. High for enabled. (e.g. PFI1)
+            sample_terminal (str): Terminal on the parent device for accepting ticks for sampling. High at tick. (e.g. PFI2)
+            **kwargs: Passed to :func:`Device.__init__`.
+        """
+        self.acquisitions = []
+        self.edge_terminal = edge_terminal
+        self.gate_terminal = gate_terminal
+        self.sample_terminal = sample_terminal
+        Device.__init__(self, name, parent_device, connection, **kwargs)
+
+    def acquire(self, label, max_sampling_rate=None, buffer_size=None, polling_interval=None):
+        """Schedule a counter acquisition
+
+        Args:
+            label (str): Unique label for the acquisition.
+            max_sampling_rate (float): Estimated maximum sampling rate in Hz. Only necessary in sampling mode.
+            buffer_size (int): Length of buffer storing sampled data. Only necessary in sampling mode.
+            polling_interval (float): Polling interval to read data from buffer in seconds. Only necessary in sampling mode.
+        """
+
+        self.acquisitions.append(
+            {
+                "label": label,
+                "max_sampling_rate": max_sampling_rate,
+                "buffer_size": buffer_size,
+                "polling_interval": polling_interval,
+            }
+        )
+
+        return
