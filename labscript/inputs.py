@@ -13,8 +13,10 @@
 
 """Classes for device channels that are inputs"""
 
+import math
+
 from .base import Device
-from .utils import set_passed_properties
+from .utils import LabscriptError, set_passed_properties
 
 
 class AnalogIn(Device):
@@ -76,6 +78,18 @@ class Counter(Device):
     """Counter Input for edge counting over timed gate windows."""
     description = "Counter Input"
 
+    manual_acquisition_defaults = {
+        "enabled": True,
+        "sample_clock": "connection_table",
+        "rate": 10.0,
+        "buffer_size": 1024,
+        "polling_interval": 0.1,
+        "multiplication_factor": 1.0,
+        "average_count": 10,
+        "udp_host": "127.0.0.1",
+        "udp_port": 9000,
+    }
+
     def __init__(self, name, parent_device, connection, edge_terminal, gate_terminal=None, sample_terminal=None, **kwargs):
         """Counter device
 
@@ -114,3 +128,117 @@ class Counter(Device):
         )
 
         return
+
+    def configure_manual_acquisition(
+        self,
+        *,
+        enabled=True,
+        sample_clock="connection_table",
+        rate=10.0,
+        buffer_size=1024,
+        polling_interval=0.1,
+        multiplication_factor=1.0,
+        average_count=10,
+        udp_host="127.0.0.1",
+        udp_port=9000,
+    ):
+        """Configure BLACS manual-mode counter acquisition.
+
+        Args:
+            enabled (bool): Whether BLACS should show manual controls for this counter.
+            sample_clock (str): ``"connection_table"`` or a counter such as ``"ctr1"``
+                to use as a manual-mode counter-output sample clock.
+            rate (float): Output counter sample clock rate in Hz.
+            buffer_size (int): Length of the NI-DAQmx read buffer.
+            polling_interval (float): Interval in seconds for BLACS to fetch data.
+            multiplication_factor (float): Additional factor applied to count diffs.
+            average_count (int): Number of values in the moving average.
+            udp_host (str): Destination host for qtconsole UDP output.
+            udp_port (int): Destination UDP port for qtconsole output.
+        """
+        sample_clock = str(sample_clock).strip()
+        sample_clock_lower = sample_clock.lower()
+        if sample_clock_lower == "connection_table":
+            sample_clock = "connection_table"
+        else:
+            try:
+                prefix = sample_clock_lower[:3]
+                ctr = int(sample_clock_lower[3:])
+            except (TypeError, ValueError):
+                raise LabscriptError(
+                    "Counter manual acquisition sample_clock must be "
+                    "'connection_table' or 'ctr<N>', not %r" % sample_clock
+                )
+            if prefix != "ctr":
+                raise LabscriptError(
+                    "Counter manual acquisition sample_clock must be "
+                    "'connection_table' or 'ctr<N>', not %r" % sample_clock
+                )
+            if ctr < 0:
+                raise LabscriptError(
+                    "Counter manual acquisition sample_clock must not be negative"
+                )
+            sample_clock = "ctr%d" % ctr
+
+        try:
+            rate = float(rate)
+            polling_interval = float(polling_interval)
+            multiplication_factor = float(multiplication_factor)
+        except (TypeError, ValueError):
+            raise LabscriptError(
+                "Counter manual acquisition rate, polling_interval and "
+                "multiplication_factor must be numeric"
+            )
+        if not math.isfinite(rate) or rate <= 0:
+            raise LabscriptError(
+                "Counter manual acquisition rate must be a finite positive number"
+            )
+        if not math.isfinite(polling_interval) or polling_interval < 0.02:
+            raise LabscriptError(
+                "Counter manual acquisition polling_interval must be at least 0.02 s"
+            )
+        if not math.isfinite(multiplication_factor):
+            raise LabscriptError(
+                "Counter manual acquisition multiplication_factor must be finite"
+            )
+
+        try:
+            buffer_size = int(buffer_size)
+            average_count = int(average_count)
+            udp_port = int(udp_port)
+        except (TypeError, ValueError):
+            raise LabscriptError(
+                "Counter manual acquisition buffer_size, average_count and udp_port "
+                "must be integers"
+            )
+        if buffer_size < 1:
+            raise LabscriptError(
+                "Counter manual acquisition buffer_size must be at least 1"
+            )
+        if average_count < 1:
+            raise LabscriptError(
+                "Counter manual acquisition average_count must be at least 1"
+            )
+        if not 1 <= udp_port <= 65535:
+            raise LabscriptError(
+                "Counter manual acquisition udp_port must be in the range 1..65535"
+            )
+
+        config = {
+            "enabled": bool(enabled),
+            "sample_clock": sample_clock,
+            "rate": rate,
+            "buffer_size": buffer_size,
+            "polling_interval": polling_interval,
+            "multiplication_factor": multiplication_factor,
+            "average_count": average_count,
+            "udp_host": str(udp_host),
+            "udp_port": udp_port,
+        }
+        self.set_property(
+            "manual_acquisition",
+            config,
+            "connection_table_properties",
+            overwrite=True,
+        )
+        return config
