@@ -84,13 +84,9 @@ class Counter(Device):
         "rate": 10.0,
         "buffer_size": 1024,
         "polling_interval": 0.1,
-        "multiplication_factor": 1.0,
-        "average_count": 10,
-        "udp_host": "127.0.0.1",
-        "udp_port": 9000,
     }
 
-    def __init__(self, name, parent_device, connection, edge_terminal, gate_terminal=None, sample_terminal=None, **kwargs):
+    def __init__(self, name, parent_device, connection, edge_terminal, gate_terminal=None, sample_terminal=None, monitor=None, **kwargs):
         """Counter device
 
         Args:
@@ -100,12 +96,22 @@ class Counter(Device):
             edge_terminal (str): Terminal on the parent device for edge counting. (e.g. PFI0)
             gate_terminal (str): Terminal on the parent device for gate. High for enabled. (e.g. PFI1)
             sample_terminal (str): Terminal on the parent device for accepting ticks for sampling. High at tick. (e.g. PFI2)
+            monitor (ChannelMonitor): Per-channel streaming monitors
+                (``user_devices.fanlab_devices.utils.fast_monitor``):
+                FastMonitor UDP stream and/or MetricsMonitor tags, used by
+                the parent device's BLACS worker in both manual mode and
+                buffered shots.
             **kwargs: Passed to :func:`Device.__init__`.
         """
         self.acquisitions = []
         self.edge_terminal = edge_terminal
         self.gate_terminal = gate_terminal
         self.sample_terminal = sample_terminal
+        if monitor is not None and not hasattr(monitor, "to_dict"):
+            raise TypeError(
+                "Counter monitor must be a fast_monitor.ChannelMonitor"
+            )
+        self.monitor = monitor
         Device.__init__(self, name, parent_device, connection, **kwargs)
 
     def acquire(self, label, max_sampling_rate=None, buffer_size=None, polling_interval=None):
@@ -137,12 +143,12 @@ class Counter(Device):
         rate=10.0,
         buffer_size=1024,
         polling_interval=0.1,
-        multiplication_factor=1.0,
-        average_count=10,
-        udp_host="127.0.0.1",
-        udp_port=9000,
     ):
         """Configure BLACS manual-mode counter acquisition.
+
+        Streaming, scaling and averaging are not configured here: samples are
+        streamed raw through the Counter's ``monitor`` (ChannelMonitor)
+        argument and any maths is the receiver's business.
 
         Args:
             enabled (bool): Whether BLACS should show manual controls for this counter.
@@ -151,10 +157,6 @@ class Counter(Device):
             rate (float): Output counter sample clock rate in Hz.
             buffer_size (int): Length of the NI-DAQmx read buffer.
             polling_interval (float): Interval in seconds for BLACS to fetch data.
-            multiplication_factor (float): Additional factor applied to count diffs.
-            average_count (int): Number of values in the moving average.
-            udp_host (str): Destination host for qtconsole UDP output.
-            udp_port (int): Destination UDP port for qtconsole output.
         """
         sample_clock = str(sample_clock).strip()
         sample_clock_lower = sample_clock.lower()
@@ -183,11 +185,10 @@ class Counter(Device):
         try:
             rate = float(rate)
             polling_interval = float(polling_interval)
-            multiplication_factor = float(multiplication_factor)
         except (TypeError, ValueError):
             raise LabscriptError(
-                "Counter manual acquisition rate, polling_interval and "
-                "multiplication_factor must be numeric"
+                "Counter manual acquisition rate and polling_interval must "
+                "be numeric"
             )
         if not math.isfinite(rate) or rate <= 0:
             raise LabscriptError(
@@ -197,31 +198,16 @@ class Counter(Device):
             raise LabscriptError(
                 "Counter manual acquisition polling_interval must be at least 0.02 s"
             )
-        if not math.isfinite(multiplication_factor):
-            raise LabscriptError(
-                "Counter manual acquisition multiplication_factor must be finite"
-            )
 
         try:
             buffer_size = int(buffer_size)
-            average_count = int(average_count)
-            udp_port = int(udp_port)
         except (TypeError, ValueError):
             raise LabscriptError(
-                "Counter manual acquisition buffer_size, average_count and udp_port "
-                "must be integers"
+                "Counter manual acquisition buffer_size must be an integer"
             )
         if buffer_size < 1:
             raise LabscriptError(
                 "Counter manual acquisition buffer_size must be at least 1"
-            )
-        if average_count < 1:
-            raise LabscriptError(
-                "Counter manual acquisition average_count must be at least 1"
-            )
-        if not 1 <= udp_port <= 65535:
-            raise LabscriptError(
-                "Counter manual acquisition udp_port must be in the range 1..65535"
             )
 
         config = {
@@ -230,10 +216,6 @@ class Counter(Device):
             "rate": rate,
             "buffer_size": buffer_size,
             "polling_interval": polling_interval,
-            "multiplication_factor": multiplication_factor,
-            "average_count": average_count,
-            "udp_host": str(udp_host),
-            "udp_port": udp_port,
         }
         self.set_property(
             "manual_acquisition",
